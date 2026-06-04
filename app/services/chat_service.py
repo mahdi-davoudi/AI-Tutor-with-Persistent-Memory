@@ -1,248 +1,163 @@
-"""
-app/services/chat_service.py
-─────────────────────────────
-Business logic for the chat feature.
-
-Responsibilities
-----------------
-1. Persist incoming user messages.
-2. Load recent conversation history for context.
-3. Build a structured prompt (system + history + new message).
-4. Delegate generation to LLMService.
-5. Persist the assistant response.
-6. Return the response to the caller (route handler).
-
-The route handlers contain ZERO business logic; they only call this service.
-
-Prompt format
--------------
-We use a plain-text format that most instruction-tuned models understand.
-When integrating a chat-template-aware tokenizer (e.g. Qwen2.5's apply_chat_template),
-swap `_build_prompt` without touching any other method.
-
-History window
---------------
-`HISTORY_WINDOW` controls how many recent turns are included in the prompt.
-Keeping it small avoids exceeding the model's context window.  A future
-memory service will inject summarised long-term context here.
-"""
-
-import logging
+from datetime import datetime, timezone
 from typing import Optional
 
-from beanie import PydanticObjectId
+import anthropic
+from beanie.operators import Set
 
-from app.models.chat import ChatDocument, MessageRole
-from app.models.user import UserDocument
-from app.schemas.chat import ChatRequest, ChatHistoryItem
-from app.services.llm_service import BaseLLMService
-
-logger = logging.getLogger(__name__)
-
-# Number of most-recent turns (user + assistant pairs) included in the prompt.
-# Each "turn" = 2 messages, so 10 turns = up to 20 ChatDocument lookups.
-HISTORY_WINDOW: int = 20  # individual messages (not pairs)
-
-SYSTEM_PROMPT: str = (
-    "You are a helpful, concise, and friendly AI assistant. "
-    "Answer the user's questions clearly. "
-    "If you don't know something, say so honestly."
+from app.core.config import get_settings
+from app.core.exceptions import AuthorizationError, NotFoundError
+from app.models.chat import ChatSession, Message
+from app.schemas.chat import (
+    ChatSessionResponse,
+    ChatTurnResponse,
+    CreateSessionRequest,
+    MessageResponse,
+    SendMessageRequest,
 )
 
 
+def _session_to_response(session: ChatSession) -> ChatSessionResponse:
+    return ChatSessionResponse(
+        id=str(session.id),
+        user_id=session.user_id,
+        title=session.title,
+        is_active=session.is_active,
+        message_count=session.message_count,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+def _message_to_response(msg: Message) -> MessageResponse:
+    return MessageResponse(
+        id=str(msg.id),
+        session_id=msg.session_id,
+        role=msg.role,
+        content=msg.content,
+        tokens_used=msg.tokens_used,
+        created_at=msg.created_at,
+    )
+
+
 class ChatService:
-    """
-    Orchestrates the full chat request/response lifecycle.
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._anthropic = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    Parameters
-    ----------
-    llm_service : BaseLLMService
-        Injected LLM backend (real or mock).
-    """
+    # Sessions
+    # ------------------------------------------------------------------------
 
-    def __init__(self, llm_service: BaseLLMService) -> None:
-        self._llm = llm_service
+    async def create_session(
+        self, user_id: str, payload: CreateSessionRequest
+    ) -> ChatSessionResponse:
+        session = ChatSession(user_id=user_id, title=payload.title or "New Chat")
+        await session.insert()
+        return _session_to_response(session)
 
-    # ── Public API ─────────────────────────────────────────────────────────────
+    async def list_sessions(self, user_id: str) -> list[ChatSessionResponse]:
+        sessions = await ChatSession.find(
+            ChatSession.user_id == user_id,
+            ChatSession.is_active == True,
+        ).sort(-ChatSession.updated_at).to_list()
+        return [_session_to_response(s) for s in sessions]
 
-    async def chat(self, request: ChatRequest) -> str:
-        """
-        Process a user message end-to-end.
+    async def get_session(self, session_id: str, user_id: str) -> ChatSessionResponse:
+        session = await self._fetch_owned_session(session_id, user_id)
+        return _session_to_response(session)
 
-        Flow
-        ----
-        user message → save → load history → build prompt
-            → generate → save assistant response → return
+    async def delete_session(self, session_id: str, user_id: str) -> None:
+        session = await self._fetch_owned_session(session_id, user_id)
+        await session.update(Set({"is_active": False, "updated_at": datetime.now(timezone.utc)}))
 
-        Parameters
-        ----------
-        request : ChatRequest
-            Validated request DTO (user_id + message text).
+    # Messages
+    # ------------------------------------------------------------------
 
-        Returns
-        -------
-        str
-            The assistant's reply.
+    async def list_messages(
+        self, session_id: str, user_id: str
+    ) -> list[MessageResponse]:
+        await self._fetch_owned_session(session_id, user_id)  
+        messages = await Message.find(
+            Message.session_id == session_id
+        ).sort(+Message.created_at).to_list()
+        return [_message_to_response(m) for m in messages]
 
-        Raises
-        ------
-        ValueError
-            If user_id does not resolve to a known user.
-        """
-        await self._assert_user_exists(request.user_id)
-
-        # 1. Persist the user's message.
-        await self._save_message(
-            user_id=request.user_id,
-            role=MessageRole.USER,
-            message=request.message,
-        )
-        logger.debug("Saved user message for user_id=%s", request.user_id)
-
-        # 2. Load recent history (excludes the message we just saved so it
-        #    doesn't appear twice in the prompt).
-        history = await self._load_history(
-            user_id=request.user_id,
-            limit=HISTORY_WINDOW,
-        )
-
-        # 3. Build the full prompt.
-        prompt = self._build_prompt(
-            history=history,
-            current_message=request.message,
-        )
-        logger.debug("Prompt built (%d chars).", len(prompt))
-
-        # 4. Generate a response from the LLM.
-        assistant_reply = await self._llm.generate(prompt)
-        logger.debug("LLM response received (%d chars).", len(assistant_reply))
-
-        # 5. Persist the assistant's response.
-        await self._save_message(
-            user_id=request.user_id,
-            role=MessageRole.ASSISTANT,
-            message=assistant_reply,
-        )
-
-        return assistant_reply
-
-    async def get_history(
+    async def send_message(
         self,
+        session_id: str,
         user_id: str,
-        limit: Optional[int] = None,
-    ) -> list[ChatDocument]:
-        """
-        Return chronologically-ordered message history for a user.
+        payload: SendMessageRequest,
+    ) -> ChatTurnResponse:
+        session = await self._fetch_owned_session(session_id, user_id)
 
-        Parameters
-        ----------
-        user_id : str
-            Target user's ObjectId hex string.
-        limit : int | None
-            Maximum number of messages to return.  None = all messages.
-        """
-        await self._assert_user_exists(user_id)
-        return await self._load_history(user_id=user_id, limit=limit)
-
-    # ── Private helpers ────────────────────────────────────────────────────────
-
-    @staticmethod
-    async def _assert_user_exists(user_id: str) -> UserDocument:
-        """Raise ValueError if user_id is invalid or not found."""
-        try:
-            oid = PydanticObjectId(user_id)
-        except Exception:
-            raise ValueError(f"Invalid user_id format: '{user_id}'")
-
-        user = await UserDocument.get(oid)
-        if user is None:
-            raise ValueError(f"User '{user_id}' not found.")
-        return user
-
-    @staticmethod
-    async def _save_message(
-        user_id: str,
-        role: MessageRole,
-        message: str,
-    ) -> ChatDocument:
-        """Create and persist a single ChatDocument."""
-        doc = ChatDocument(user_id=user_id, role=role, message=message)
-        await doc.insert()
-        return doc
-
-    @staticmethod
-    async def _load_history(
-        user_id: str,
-        limit: Optional[int],
-    ) -> list[ChatDocument]:
-        """
-        Load the N most recent messages for user_id, ordered oldest → newest.
-
-        MongoDB sort is descending (newest first) then reversed in Python so
-        the prompt reads naturally (oldest turn at the top).
-        """
-        query = ChatDocument.find(
-            ChatDocument.user_id == user_id,
-            sort=-ChatDocument.timestamp,  # newest first
+        # Persist the user turn
+        user_msg = Message(
+            session_id=session_id,
+            role="user",
+            content=payload.content,
         )
-        if limit is not None:
-            query = query.limit(limit)
+        await user_msg.insert()
 
-        docs: list[ChatDocument] = await query.to_list()
-        # Reverse to get chronological order (oldest at index 0)
-        docs.reverse()
-        return docs
+        # Build conversation history for the AI (last 20 messages keeps context manageable)
+        history = await Message.find(
+            Message.session_id == session_id,
+        ).sort(+Message.created_at).limit(20).to_list()
 
-    @staticmethod
-    def _build_prompt(
-        history: list[ChatDocument],
-        current_message: str,
-    ) -> str:
-        """
-        Assemble a text prompt from system instruction, history, and the
-        current user message.
+        ai_messages = [
+            {"role": m.role, "content": m.content}
+            for m in history
+            if m.role in ("user", "assistant")
+        ]
 
-        Format
-        ------
-        System:
-        <system prompt>
+        # Call Anthropic Claude
+        ai_response = await self._anthropic.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            system="You are a helpful assistant.",
+            messages=ai_messages,
+        )
 
-        Conversation History:
-        User: <message>
-        Assistant: <message>
-        ...
+        assistant_content = ai_response.content[0].text
+        tokens_used = ai_response.usage.output_tokens
 
-        Current User Message:
-        <current_message>
+        # Persist the assistant turn
+        assistant_msg = Message(
+            session_id=session_id,
+            role="assistant",
+            content=assistant_content,
+            tokens_used=tokens_used,
+        )
+        await assistant_msg.insert()
 
-        Assistant:
+        # Update session metadata
+        now = datetime.now(timezone.utc)
+        new_count = session.message_count + 2
+        new_title = session.title
+        if session.message_count == 0:
+            # Auto-title from first user message
+            new_title = payload.content[:60] + ("…" if len(payload.content) > 60 else "")
 
-        The trailing "Assistant:" cues most instruction-tuned models to
-        generate an assistant-role continuation.
+        await session.update(
+            Set({
+                "message_count": new_count,
+                "title": new_title,
+                "updated_at": now,
+            })
+        )
+        await session.sync()
 
-        Note: When using a tokenizer with `apply_chat_template` support,
-        replace this method body with the template call.  The interface
-        remains identical.
-        """
-        lines: list[str] = []
+        return ChatTurnResponse(
+            user_message=_message_to_response(user_msg),
+            assistant_message=_message_to_response(assistant_msg),
+            session=_session_to_response(session),
+        )
 
-        # System block
-        lines.append("System:")
-        lines.append(SYSTEM_PROMPT)
-        lines.append("")
+    # Helpers
+    # ------------------------------------------------------------------
 
-        # History block (may be empty for first message)
-        if history:
-            lines.append("Conversation History:")
-            for turn in history:
-                role_label = "User" if turn.role == MessageRole.USER else "Assistant"
-                lines.append(f"{role_label}: {turn.message}")
-            lines.append("")
-
-        # Current turn
-        lines.append("Current User Message:")
-        lines.append(current_message)
-        lines.append("")
-        lines.append("Assistant:")
-
-        return "\n".join(lines)
+    async def _fetch_owned_session(self, session_id: str, user_id: str) -> ChatSession:
+        session = await ChatSession.get(session_id)
+        if not session:
+            raise NotFoundError("ChatSession", session_id)
+        if session.user_id != user_id:
+            raise AuthorizationError("Access denied.")
+        return session

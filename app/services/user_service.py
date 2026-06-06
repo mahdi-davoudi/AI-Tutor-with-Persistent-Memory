@@ -2,11 +2,11 @@ from datetime import timedelta, timezone, datetime
 
 from beanie.operators import Set
 
-from core.config import get_settings
-from core.exceptions import AuthenticationError, ConflictError, NotFoundError
-from core.security import hash_password, verify_password, create_access_token
-from models.user import User
-from schemas.user import (
+from app.core.config import get_settings
+from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
+from app.core.security import hash_password, verify_password, create_access_token
+from app.models.user import User
+from app.schemas.user import (
     UserRegisterRequest,
     UserLoginRequest,
     UserUpdateRequest,

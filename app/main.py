@@ -5,9 +5,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from core.config import get_settings
-from core.database import connect_db, disconnect_db
-from core.exceptions import (
+from app.core.config import get_settings
+from app.core.database import connect_db, disconnect_db
+from app.core.exceptions import (
     AppError,
     AuthenticationError,
     AuthorizationError,
@@ -99,9 +99,9 @@ def create_app() -> FastAPI:
 
     # Routers
     # ------------------------------------------------------------------
-    from api.routes.users import router as users_router
-    from api.routes.chat import router as chat_router
-    from api.routes.memory import router as memory_router
+    from app.api.routes.users import router as users_router
+    from app.api.routes.chat import router as chat_router
+    from app.api.routes.memory import router as memory_router
 
     app.include_router(users_router,  prefix="/api/v1")
     app.include_router(chat_router,   prefix="/api/v1")

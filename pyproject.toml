@@ -1,0 +1,6 @@
+[project]
+name = "ai-tutor"
+version = "1.0.0"
+
+[tool.setuptools.packages.find]
+where = ["."]

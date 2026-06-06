@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from core.exceptions import ConflictError, NotFoundError, AuthenticationError
-from schemas.user import (
+from app.core.exceptions import ConflictError, NotFoundError, AuthenticationError
+from app.schemas.user import (
     UserRegisterRequest,
     UserLoginRequest,
     UserUpdateRequest,
     UserResponse,
     TokenResponse,
 )
-from services.user_service import UserService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 

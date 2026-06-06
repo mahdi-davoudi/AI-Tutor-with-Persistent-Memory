@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 
-from core.exceptions import NotFoundError
-from schemas.memory import UpsertMemoryRequest, MemoryResponse
-from services.memory_service import MemoryService
+from app.core.exceptions import NotFoundError
+from app.schemas.memory import UpsertMemoryRequest, MemoryResponse
+from app.services.memory_service import MemoryService
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from core.config import get_settings
-from core.exceptions import NotFoundError
-from repositories.chat_repository import ChatRepository
-from schemas.chat import ChatMessageCreate, ChatMessageResponse
-from services.chat_service import ChatService
-from services.llm_service import LLMService
+from app.core.config import get_settings
+from app.core.exceptions import NotFoundError
+from app.repositories.chat_repository import ChatRepository
+from app.schemas.chat import ChatMessageCreate, ChatMessageResponse
+from app.services.chat_service import ChatService
+from app.services.llm_service import LLMService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -26,8 +26,8 @@ async def send_message(
     """Send a message and receive an AI response."""
     try:
         # Find or create session for user
-        from models.chat import ChatSession
-        from repositories.chat_repository import ChatRepository
+        from app.models.chat import ChatSession
+        from app.repositories.chat_repository import ChatRepository
 
         repo = ChatRepository()
         sessions = await ChatSession.find(

@@ -22,7 +22,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
 
     anthropic_api_key: str = ""
-
+    
+    hf_api_token: str = ""
+    hf_model_id: str = "mistralai/Mistral-7B-Instruct-v0.2"
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"

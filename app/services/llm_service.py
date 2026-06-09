@@ -16,7 +16,11 @@ class LLMService:
         self.model_id = settings.hf_model_id
         self.api_url = "https://router.huggingface.co/v1/chat/completions"
 
-    async def generate(self, messages: list[dict]) -> tuple[str, int]:
+    async def generate(
+        self,
+        messages: list[dict],
+        system_prompt: str | None = None,
+    ) -> tuple[str, int]:
         headers = {
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
@@ -25,7 +29,10 @@ class LLMService:
         payload = {
             "model": self.model_id,
             "messages": [
-                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": system_prompt or self.SYSTEM_PROMPT,
+                },
                 *messages,
             ],
             "max_tokens": 512,

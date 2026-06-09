@@ -2,42 +2,69 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
+from app.domain.memory_extractor import MemoryExtractor
+from app.models.chat import ChatSession
 from app.repositories.chat_repository import ChatRepository
 from app.schemas.chat import ChatMessageCreate, ChatMessageResponse
 from app.services.chat_service import ChatService
 from app.services.llm_service import LLMService
+from app.services.memory_service import MemoryService
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(
+    prefix="/chat",
+    tags=["chat"],
+)
 
 
 def get_chat_service() -> ChatService:
     settings = get_settings()
+
+    llm = LLMService(
+        api_key=settings.anthropic_api_key,
+    )
+
+    memory_service = MemoryService()
+
+    memory_extractor = MemoryExtractor(
+        llm=llm,
+    )
+
     return ChatService(
         repo=ChatRepository(),
-        llm=LLMService(api_key=settings.anthropic_api_key),
+        llm=llm,
+        memory_service=memory_service,
+        memory_extractor=memory_extractor,
     )
 
 
-@router.post("", response_model=ChatMessageResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "",
+    response_model=ChatMessageResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def send_message(
     body: ChatMessageCreate,
     service: ChatService = Depends(get_chat_service),
 ) -> ChatMessageResponse:
-    """Send a message and receive an AI response."""
     try:
-        # Find or create session for user
-        from app.models.chat import ChatSession
-        from app.repositories.chat_repository import ChatRepository
 
         repo = ChatRepository()
-        sessions = await ChatSession.find(
-            ChatSession.user_id == body.user_id
-        ).sort(-ChatSession.updated_at).limit(1).to_list()
+
+        sessions = (
+            await ChatSession.find(
+                ChatSession.user_id == body.user_id
+            )
+            .sort(-ChatSession.updated_at)
+            .limit(1)
+            .to_list()
+        )
 
         if sessions:
             session = sessions[0]
         else:
-            session = ChatSession(user_id=body.user_id)
+            session = ChatSession(
+                user_id=body.user_id,
+            )
             await repo.create_session(session)
 
         result = await service.send_message(
@@ -53,12 +80,22 @@ async def send_message(
         )
 
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        )
+
     except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=exc.message,
+        )
+
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),

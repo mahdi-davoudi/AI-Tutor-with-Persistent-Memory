@@ -8,10 +8,52 @@ from app.services.llm_service import LLMService
 
 
 class ChatService:
-
-    def __init__(self, repo: ChatRepository, llm: LLMService):
+    
+    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor ):
         self.repo = repo
         self.llm = llm
+        self.memory_service = memory_service
+        self.memory_extractor = memory_extractor
+    
+    async def _extract_and_store_memories(
+        self,
+        user_id: str,
+        session_id: str,
+        user_message: str,
+        answer: str,
+    ):
+
+        memories = await self.memory_extractor.extract(
+            user_message=user_message,
+            assistant_response=answer,
+        )
+        print("=" * 50)
+        print("EXTRACTED MEMORIES:")
+        print(memories)
+        print("=" * 50)
+        from app.schemas.memory import UpsertMemoryRequest
+
+        for memory in memories:
+
+            try:
+
+                payload = UpsertMemoryRequest(
+                    key=memory["key"],
+                    value=memory["value"],
+                    importance=memory.get(
+                        "importance",
+                        0.5,
+                    ),
+                )
+
+                await self.memory_service.upsert(
+                    user_id=user_id,
+                    payload=payload,
+                    source_session_id=session_id,
+                )
+
+            except Exception:
+                continue
 
     async def send_message(self, session_id: str, user_id: str, content: str):
 
@@ -51,6 +93,14 @@ class ChatService:
             tokens_used=tokens,
         )
         await self.repo.create_message(assistant_msg)
+        
+        #6.1 memory added
+        await self._extract_and_store_memories(
+            user_id=user_id,
+            session_id=session_id,
+            user_message=content,
+            answer=answer,
+        )
 
         # 7. Update session metadata (domain rule)
         new_count = len(history) + 2

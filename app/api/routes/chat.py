@@ -47,35 +47,15 @@ async def send_message(
     service: ChatService = Depends(get_chat_service),
 ) -> ChatMessageResponse:
     try:
-
-        repo = ChatRepository()
-
-        sessions = (
-            await ChatSession.find(
-                ChatSession.user_id == body.user_id
-            )
-            .sort(-ChatSession.updated_at)
-            .limit(1)
-            .to_list()
-        )
-
-        if sessions:
-            session = sessions[0]
-        else:
-            session = ChatSession(
-                user_id=body.user_id,
-            )
-            await repo.create_session(session)
-
+        
         result = await service.send_message(
-            session_id=str(session.id),
             user_id=body.user_id,
             content=body.message,
         )
 
         return ChatMessageResponse(
             response=result["assistant_message"].content,
-            session_id=str(session.id),
+            session_id=result["session_id"],
             tokens_used=result["assistant_message"].tokens_used,
         )
 

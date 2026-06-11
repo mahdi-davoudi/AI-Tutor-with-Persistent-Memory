@@ -8,13 +8,28 @@ from app.services.llm_service import LLMService
 
 
 class ChatService:
-    
-    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor ):
+
+    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor):
         self.repo = repo
         self.llm = llm
         self.memory_service = memory_service
         self.memory_extractor = memory_extractor
-    
+
+    async def _get_or_create_session(self, user_id: str) -> ChatSession:
+        sessions = (
+            await ChatSession.find(ChatSession.user_id == user_id)
+            .sort(-ChatSession.updated_at)
+            .limit(1)
+            .to_list()
+        )
+
+        if sessions:
+            return sessions[0]
+
+        session = ChatSession(user_id=user_id)
+        await self.repo.create_session(session)
+        return session
+
     async def _extract_and_store_memories(
         self,
         user_id: str,
@@ -22,46 +37,33 @@ class ChatService:
         user_message: str,
         answer: str,
     ):
-
         memories = await self.memory_extractor.extract(
             user_message=user_message,
             assistant_response=answer,
         )
-        print("=" * 50)
-        print("EXTRACTED MEMORIES:")
-        print(memories)
-        print("=" * 50)
+
         from app.schemas.memory import UpsertMemoryRequest
 
         for memory in memories:
-
             try:
-
                 payload = UpsertMemoryRequest(
                     key=memory["key"],
                     value=memory["value"],
-                    importance=memory.get(
-                        "importance",
-                        0.5,
-                    ),
+                    importance=memory.get("importance", 0.5),
                 )
-
                 await self.memory_service.upsert(
                     user_id=user_id,
                     payload=payload,
                     source_session_id=session_id,
                 )
-
             except Exception:
                 continue
 
-    async def send_message(self, session_id: str, user_id: str, content: str):
+    # ─── Main Method 
+    async def send_message(self, user_id: str, content: str):
 
-        # 1. Load session
-        session = await self.repo.get_session(session_id)
-
-        if not session or session.user_id != user_id:
-            raise PermissionError("Access denied")
+        session = await self._get_or_create_session(user_id)
+        session_id = str(session.id)
 
         # 2. Save user message
         user_msg = Message(
@@ -73,13 +75,12 @@ class ChatService:
 
         # 3. Get history
         history = await self.repo.get_messages(session_id, limit=20)
-
         history_dict = [
             {"role": m.role, "content": m.content}
             for m in history
         ]
 
-        # 4. Build prompt (domain logic)
+        # 4. Build prompt
         messages = PromptBuilder.build(history_dict, content)
 
         # 5. Call LLM
@@ -93,8 +94,8 @@ class ChatService:
             tokens_used=tokens,
         )
         await self.repo.create_message(assistant_msg)
-        
-        #6.1 memory added
+
+        # 7. Extract and store memories
         await self._extract_and_store_memories(
             user_id=user_id,
             session_id=session_id,
@@ -102,9 +103,8 @@ class ChatService:
             answer=answer,
         )
 
-        # 7. Update session metadata (domain rule)
+        # 8. Update session metadata
         new_count = len(history) + 2
-
         update_data = {
             "message_count": new_count,
             "updated_at": datetime.now(timezone.utc),
@@ -121,9 +121,9 @@ class ChatService:
 
         await self.repo.update_session(session)
 
-        # 8. Return response
+        # 9. Return response
         return {
             "user_message": user_msg,
             "assistant_message": assistant_msg,
-            "session": session,
+            "session_id": session_id,
         }

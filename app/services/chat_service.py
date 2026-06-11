@@ -59,9 +59,9 @@ class ChatService:
             except Exception:
                 continue
 
-    # ─── Main Method 
     async def send_message(self, user_id: str, content: str):
 
+        # 1. Get or create session
         session = await self._get_or_create_session(user_id)
         session_id = str(session.id)
 
@@ -80,13 +80,16 @@ class ChatService:
             for m in history
         ]
 
-        # 4. Build prompt
-        messages = PromptBuilder.build(history_dict, content)
+        # 4. Load memories
+        memories = await self.memory_service.list_memories(user_id)
 
-        # 5. Call LLM
+        # 5. Build prompt
+        messages = PromptBuilder.build(history_dict, content, memories) 
+
+        # 6. Call LLM
         answer, tokens = await self.llm.generate(messages)
 
-        # 6. Save assistant message
+        # 7. Save assistant message
         assistant_msg = Message(
             session_id=session_id,
             role="assistant",
@@ -95,7 +98,7 @@ class ChatService:
         )
         await self.repo.create_message(assistant_msg)
 
-        # 7. Extract and store memories
+        # 8. Extract and store memories
         await self._extract_and_store_memories(
             user_id=user_id,
             session_id=session_id,
@@ -103,7 +106,7 @@ class ChatService:
             answer=answer,
         )
 
-        # 8. Update session metadata
+        # 9. Update session metadata
         new_count = len(history) + 2
         update_data = {
             "message_count": new_count,
@@ -121,7 +124,7 @@ class ChatService:
 
         await self.repo.update_session(session)
 
-        # 9. Return response
+        # 10. Return response
         return {
             "user_message": user_msg,
             "assistant_message": assistant_msg,

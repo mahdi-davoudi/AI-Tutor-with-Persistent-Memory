@@ -19,7 +19,6 @@ class LLMService:
     async def generate(
         self,
         messages: list[dict],
-        system_prompt: str | None = None,
     ) -> tuple[str, int]:
         headers = {
             "Authorization": f"Bearer {self.api_token}",
@@ -28,20 +27,12 @@ class LLMService:
 
         payload = {
             "model": self.model_id,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt or self.SYSTEM_PROMPT,
-                },
-                *messages,
-            ],
+            "messages": messages,  # ← مستقیم pass بده، بدون system اضافه
             "max_tokens": 512,
             "temperature": 0.7,
         }
 
-        async with httpx.AsyncClient(
-            timeout=60
-        ) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(self.api_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()

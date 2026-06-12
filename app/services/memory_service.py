@@ -15,6 +15,8 @@ def _to_response(memory: Memory) -> MemoryResponse:
         key=memory.key,
         value=memory.value,
         importance=memory.importance,
+        memory_type=memory.memory_type,       
+        topic=memory.topic, 
         source_session_id=memory.source_session_id,
         created_at=memory.created_at,
         updated_at=memory.updated_at,
@@ -28,6 +30,7 @@ class MemoryService:
         payload: UpsertMemoryRequest,
         source_session_id: Optional[str] = None,
     ) -> MemoryResponse:
+        
         existing = await Memory.find_one(
             Memory.user_id == user_id,
             Memory.key == payload.key,
@@ -37,6 +40,8 @@ class MemoryService:
                 Set({
                     "value": payload.value,
                     "importance": payload.importance,
+                    "memory_type": payload.memory_type,    
+                    "topic": payload.topic or "general",
                     "updated_at": datetime.now(timezone.utc),
                 })
             )
@@ -48,9 +53,12 @@ class MemoryService:
             key=payload.key,
             value=payload.value,
             importance=payload.importance,
+            memory_type=payload.memory_type,      
+            topic=payload.topic or "general", 
             source_session_id=source_session_id,
         )
         await memory.insert()
+
         return _to_response(memory)
 
     async def list_memories(
@@ -84,5 +92,5 @@ class MemoryService:
         if not memory:
             raise NotFoundError("Memory", memory_id)
         if memory.user_id != user_id:
-            raise NotFoundError("Memory", memory_id)  # don't leak existence
+            raise NotFoundError("Memory", memory_id)  
         return memory

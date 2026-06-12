@@ -13,7 +13,7 @@ class ChatRepository:
         return session
 
     async def update_session(self, session: ChatSession):
-        await session.save()
+        await session.replace()
 
     # Messages
     # --------------------

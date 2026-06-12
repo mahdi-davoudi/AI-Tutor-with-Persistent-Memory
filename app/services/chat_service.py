@@ -37,33 +37,47 @@ class ChatService:
         user_message: str,
         answer: str,
     ):
-        memories = await self.memory_extractor.extract(
-            user_message=user_message,
-            assistant_response=answer,
-        )
+        try:
+            memories = await self.memory_extractor.extract(
+                user_message=user_message,
+                assistant_response=answer,
+            )
 
-        from app.schemas.memory import UpsertMemoryRequest
+            print("=" * 50)
+            print("EXTRACTED MEMORIES:", memories)
+            print("=" * 50)
 
-        for memory in memories:
-            try:
-                payload = UpsertMemoryRequest(
-                    key=memory["key"],
-                    value=memory["value"],
-                    importance=memory.get("importance", 0.5),
-                )
-                await self.memory_service.upsert(
-                    user_id=user_id,
-                    payload=payload,
-                    source_session_id=session_id,
-                )
-            except Exception:
-                continue
+            from app.schemas.memory import UpsertMemoryRequest
+
+            for memory in memories:
+                try:
+                    payload = UpsertMemoryRequest(
+                        key=memory["key"],
+                        value=memory["value"],
+                        importance=memory.get("importance", 0.5),
+                        memory_type=memory.get("memory_type", "learning_topic"), 
+                        topic=memory.get("topic", "general"),  
+                    )
+                    await self.memory_service.upsert(
+                        user_id=user_id,
+                        payload=payload,
+                        source_session_id=session_id,
+                    )
+                except Exception as e:
+                    print(f"MEMORY UPSERT ERROR: {e}")
+                    continue
+
+        except Exception as e:
+            print(f"MEMORY EXTRACTION ERROR: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def send_message(self, user_id: str, content: str):
 
         # 1. Get or create session
         session = await self._get_or_create_session(user_id)
         session_id = str(session.id)
+        print(f"SESSION ID: {session_id}")
 
         # 2. Save user message
         user_msg = Message(
@@ -72,6 +86,7 @@ class ChatService:
             content=content,
         )
         await self.repo.create_message(user_msg)
+        print(f"USER MSG SAVED: {user_msg.id}")
 
         # 3. Get history
         history = await self.repo.get_messages(session_id, limit=20)
@@ -107,7 +122,7 @@ class ChatService:
         )
 
         # 9. Update session metadata
-        new_count = len(history) + 2
+        new_count = session.message_count + 2
         update_data = {
             "message_count": new_count,
             "updated_at": datetime.now(timezone.utc),
@@ -123,6 +138,7 @@ class ChatService:
             session.title = update_data["title"]
 
         await self.repo.update_session(session)
+        print(f"SESSION UPDATED: {session.id}, message_count={session.message_count}, title={session.title}")
 
         # 10. Return response
         return {

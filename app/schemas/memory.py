@@ -19,7 +19,9 @@ class MemoryResponse(BaseModel):
     value: str
     importance: float
     memory_type: str = "learning_topic"  
-    topic: Optional[str] = None      
+    topic: Optional[str] = None     
+    frequency: int = 1         
+    confidence: float = 0.8  
     source_session_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime

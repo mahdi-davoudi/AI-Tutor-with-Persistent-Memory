@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from beanie.operators import Set
+from beanie.operators import Set, Inc
 
 from app.core.exceptions import NotFoundError
 from app.models.memory import Memory
@@ -17,6 +17,8 @@ def _to_response(memory: Memory) -> MemoryResponse:
         importance=memory.importance,
         memory_type=memory.memory_type,       
         topic=memory.topic, 
+        frequency=memory.frequency,       
+        confidence=memory.confidence,  
         source_session_id=memory.source_session_id,
         created_at=memory.created_at,
         updated_at=memory.updated_at,
@@ -42,8 +44,10 @@ class MemoryService:
                     "importance": payload.importance,
                     "memory_type": payload.memory_type,    
                     "topic": payload.topic or "general",
+                    "last_accessed_at": datetime.now(timezone.utc),
                     "updated_at": datetime.now(timezone.utc),
-                })
+                }),
+                Inc({"frequency": 1}),
             )
             await existing.sync()
             return _to_response(existing)

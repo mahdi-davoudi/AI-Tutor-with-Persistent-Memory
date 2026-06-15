@@ -1,16 +1,13 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 import logging
-
 from app.core.config import get_settings
+
 
 logger = logging.getLogger(__name__)
 
 
 async def connect_db(app) -> None:
-    """
-    Initialize MongoDB connection and attach to app.state
-    """
     settings = get_settings()
 
     client = AsyncIOMotorClient(
@@ -25,12 +22,12 @@ async def connect_db(app) -> None:
     from app.models.user import User
     from app.models.chat import ChatSession, Message
     from app.models.memory import Memory
-
+    from app.models.learning_profile import LearningProfile
+    
     await init_beanie(
         database=database,
-        document_models=[User, ChatSession, Message, Memory],
+        document_models=[User, ChatSession, Message, Memory, LearningProfile], 
     )
-
     # attach to app state (IMPORTANT FIX)
     app.state.mongo_client = client
     app.state.mongo_db = database

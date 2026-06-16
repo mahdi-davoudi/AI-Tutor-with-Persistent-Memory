@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-
 from app.models.chat import Message, ChatSession
 from app.repositories.chat_repository import ChatRepository
 from app.domain.prompt_builder import PromptBuilder
 from app.domain.session_policy import SessionPolicy
 from app.services.llm_service import LLMService
+from app.services.profile_service import ProfileService
 
 
 class ChatService:
@@ -98,8 +98,11 @@ class ChatService:
         # 4. Load memories
         memories = await self.memory_service.list_memories(user_id)
 
-        # 5. Build prompt
-        messages = PromptBuilder.build(history_dict, content, memories) 
+        # 4.5 Load learning profile 
+        profile = await ProfileService().get_summary(user_id)
+
+        # 5. Build prompt 
+        messages = PromptBuilder.build(history_dict, content, memories, profile)
 
         # 6. Call LLM
         answer, tokens = await self.llm.generate(messages)

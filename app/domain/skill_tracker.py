@@ -39,19 +39,20 @@ class SkillTracker:
             value = (mem.get("value") or "").lower()
             key = (mem.get("key") or "").strip().lower()
 
-            # subtopic استخراج: prefix topic رو حذف میکنیم
-            # "mblock_beginner_level" → "beginner_level"
-            # اما اگه key فقط topic بود → از memory_type استفاده میکنیم
             if key.startswith(f"{topic}_"):
                 subtopic = key[len(topic) + 1:]
             else:
                 subtopic = key
 
-            # subtopic خیلی عمومی رو reject کن
-            generic = {"level", "skill", "general", "topic", "learning"}
-            if not subtopic or subtopic in generic:
-                subtopic = memory_type  # fallback به memory_type
-
+            invalid_subtopics = {
+                "level", "skill", "general", "topic", "learning",
+                "beginner", "beginner_level", "intermediate", "intermediate_level",
+                "advanced", "advanced_level", "basic", "novice",
+            }
+            if not subtopic or subtopic in invalid_subtopics:
+                parts = key.replace(f"{topic}_", "", 1).replace("_skill", "").replace("_level", "")
+                subtopic = parts if parts and parts not in invalid_subtopics else memory_type
+                
             if not subtopic:
                 continue
 
@@ -84,19 +85,30 @@ class SkillTracker:
         if memory_type == "strong_area":
             return "strong"
         if memory_type == "skill_level":
-            # از value سطح رو بفهم
-            if any(w in value for w in ("beginner", "basic", "novice", "struggling")):
-                return "weak"
-            if any(w in value for w in ("advanced", "expert", "proficient", "comfortable")):
+            strong_words = (
+                "advanced", "expert", "proficient", "comfortable",
+                "familiar", "good", "strong", "experienced", "confident",
+            )
+            weak_words = (
+                "beginner", "basic", "novice", "struggling",
+                "learning", "new to", "just started",
+            )
+            neutral_words = (
+                "intermediate", "medium", "moderate", "average",
+            )
+            if any(w in value for w in neutral_words):
+                return "neutral"
+            if any(w in value for w in strong_words):
                 return "strong"
-            return "neutral"  # intermediate → neutral
-        if any(w in value for w in ("struggle", "weak", "difficult", "hard")):
+            if any(w in value for w in weak_words):
+                return "weak"
+            return "neutral"
+        # learning_topic / general
+        if any(w in value for w in ("struggle", "weak", "difficult", "hard", "problem")):
             return "weak"
-        if any(w in value for w in ("strong", "comfortable", "master", "good")):
+        if any(w in value for w in ("strong", "comfortable", "master", "good", "proficient")):
             return "strong"
         return "neutral"
-
-    @staticmethod
     def _parse_level(value: str) -> str | None:
         for alias, canonical in _LEVEL_ALIASES.items():
             if alias in value:

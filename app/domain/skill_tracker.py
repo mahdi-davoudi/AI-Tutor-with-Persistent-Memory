@@ -1,13 +1,13 @@
 import math
 from typing import Any
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class SkillEntry:
     subtopic: str
-    tag: str          # "weak" | "strong" | "neutral"
+    tag: str  # "weak" | "strong" | "neutral"
     importance: float = 0.5
     frequency: int = 1
     level_hint: str | None = None
@@ -19,6 +19,12 @@ _LEVEL_ALIASES = {
     "beginner": "beginner", "basic": "beginner", "novice": "beginner",
     "intermediate": "intermediate", "medium": "intermediate",
     "advanced": "advanced", "expert": "advanced", "proficient": "advanced",
+}
+
+_INVALID_SUBTOPICS = {
+    "level", "skill", "general", "topic", "learning",
+    "beginner", "beginner_level", "intermediate", "intermediate_level",
+    "advanced", "advanced_level", "basic", "novice",
 }
 
 
@@ -39,25 +45,22 @@ class SkillTracker:
             value = (mem.get("value") or "").lower()
             key = (mem.get("key") or "").strip().lower()
 
-            if key.startswith(f"{topic}_"):
-                subtopic = key[len(topic) + 1:]
-            else:
-                subtopic = key
+            raw = key[len(topic) + 1:] if key.startswith(f"{topic}_") else key
+            raw = raw.removesuffix("_skill").removesuffix("_level")
+            subtopic = raw
 
-            invalid_subtopics = {
-                "level", "skill", "general", "topic", "learning",
-                "beginner", "beginner_level", "intermediate", "intermediate_level",
-                "advanced", "advanced_level", "basic", "novice",
-            }
-            if not subtopic or subtopic in invalid_subtopics:
-                parts = key.replace(f"{topic}_", "", 1).replace("_skill", "").replace("_level", "")
-                subtopic = parts if parts and parts not in invalid_subtopics else memory_type
-                
+            if not subtopic or subtopic in _INVALID_SUBTOPICS:
+                subtopic = memory_type
+
             if not subtopic:
                 continue
 
             tag = SkillTracker._resolve_tag(memory_type, value)
-            level_hint = SkillTracker._parse_level(value) if memory_type == "skill_level" else None
+            level_hint = (
+                SkillTracker._parse_level(value)
+                if memory_type == "skill_level"
+                else None
+            )
 
             existing = skill_map[topic].get(subtopic)
             if existing:
@@ -93,9 +96,8 @@ class SkillTracker:
                 "beginner", "basic", "novice", "struggling",
                 "learning", "new to", "just started",
             )
-            neutral_words = (
-                "intermediate", "medium", "moderate", "average",
-            )
+            neutral_words = ("intermediate", "medium", "moderate", "average")
+
             if any(w in value for w in neutral_words):
                 return "neutral"
             if any(w in value for w in strong_words):
@@ -103,12 +105,15 @@ class SkillTracker:
             if any(w in value for w in weak_words):
                 return "weak"
             return "neutral"
+
         # learning_topic / general
         if any(w in value for w in ("struggle", "weak", "difficult", "hard", "problem")):
             return "weak"
         if any(w in value for w in ("strong", "comfortable", "master", "good", "proficient")):
             return "strong"
         return "neutral"
+
+    @staticmethod
     def _parse_level(value: str) -> str | None:
         for alias, canonical in _LEVEL_ALIASES.items():
             if alias in value:

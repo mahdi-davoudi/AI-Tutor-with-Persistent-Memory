@@ -103,11 +103,13 @@ def create_app() -> FastAPI:
     from app.api.routes.chat import router as chat_router
     from app.api.routes.memory import router as memory_router
     from app.api.routes.profile import router as profile_router
+    from app.api.routes import recommendation
 
     app.include_router(users_router,  prefix="/api/v1")
     app.include_router(chat_router,   prefix="/api/v1")
     app.include_router(memory_router, prefix="/api/v1")  
     app.include_router(profile_router, prefix="/api/v1")
+    app.include_router(recommendation.router)
 
     # Health check
     # ------------------------------------------------------------------

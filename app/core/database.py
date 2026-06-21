@@ -18,17 +18,16 @@ async def connect_db(app) -> None:
 
     database = client[settings.database_name]
 
-    # Import models here (avoid circular imports)
     from app.models.user import User
     from app.models.chat import ChatSession, Message
     from app.models.memory import Memory
     from app.models.learning_profile import LearningProfile
+    from app.models.recommendation import Recommendation
     
     await init_beanie(
         database=database,
-        document_models=[User, ChatSession, Message, Memory, LearningProfile], 
+        document_models=[User, ChatSession, Message, Memory, LearningProfile, Recommendation], 
     )
-    # attach to app state (IMPORTANT FIX)
     app.state.mongo_client = client
     app.state.mongo_db = database
 

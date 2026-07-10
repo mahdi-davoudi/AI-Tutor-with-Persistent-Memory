@@ -35,9 +35,6 @@ async def connect_db(app) -> None:
 
 
 async def disconnect_db(app) -> None:
-    """
-    Gracefully close MongoDB connection
-    """
     client = getattr(app.state, "mongo_client", None)
 
     if client:

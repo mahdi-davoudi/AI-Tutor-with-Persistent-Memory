@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from typing import Optional
-
 from beanie import Document, Indexed
 from pydantic import Field
 from pymongo import IndexModel, ASCENDING, DESCENDING

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.models.chat import Role
 
 
-# ---------- Session ----------
+# Session
 
 class SessionCreateRequest(BaseModel):
     user_id: str
@@ -23,7 +23,7 @@ class SessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- Message ----------
+# Message 
 
 class ChatMessageCreate(BaseModel):
     user_id: str = Field(min_length=1)

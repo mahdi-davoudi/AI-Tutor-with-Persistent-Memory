@@ -89,8 +89,6 @@ class MemoryService:
         return result.deleted_count if result else 0
 
     # Helper
-    # ------------------------------------------------------------------
-
     async def _fetch_owned(self, user_id: str, memory_id: str) -> Memory:
         memory = await Memory.get(memory_id)
         if not memory:

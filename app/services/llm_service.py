@@ -27,7 +27,7 @@ class LLMService:
 
         payload = {
             "model": self.model_id,
-            "messages": messages,  # ← مستقیم pass بده، بدون system اضافه
+            "messages": messages, 
             "max_tokens": 512,
             "temperature": 0.7,
         }

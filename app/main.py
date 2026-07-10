@@ -1,10 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 from app.core.config import get_settings
 from app.core.database import connect_db, disconnect_db
 from app.core.exceptions import (
@@ -44,7 +42,6 @@ def create_app() -> FastAPI:
     )
 
     # CORS
-    # ------------------------------------------------------------------ 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if not settings.is_production else [],
@@ -54,7 +51,6 @@ def create_app() -> FastAPI:
     )
 
     # Exception handlers
-    # ------------------------------------------------------------------ 
     @app.exception_handler(NotFoundError)
     async def not_found_handler(request: Request, exc: NotFoundError):
         return JSONResponse(
@@ -98,7 +94,6 @@ def create_app() -> FastAPI:
         )
 
     # Routers
-    # ------------------------------------------------------------------
     from app.api.routes.users import router as users_router
     from app.api.routes.chat import router as chat_router
     from app.api.routes.memory import router as memory_router
@@ -112,7 +107,6 @@ def create_app() -> FastAPI:
     app.include_router(recommendation.router)
 
     # Health check
-    # ------------------------------------------------------------------
     @app.get("/health", tags=["system"])
     async def health():
         return {"status": "ok"}

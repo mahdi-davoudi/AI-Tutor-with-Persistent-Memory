@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-
 from app.core.exceptions import ConflictError, NotFoundError, AuthenticationError
 from app.schemas.user import (
     UserRegisterRequest,

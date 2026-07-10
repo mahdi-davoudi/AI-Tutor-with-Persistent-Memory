@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.domain.memory_extractor import MemoryExtractor

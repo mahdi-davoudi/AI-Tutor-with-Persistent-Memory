@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, status
-
 from app.schemas.learning_profile import LearningProfileResponse
 from app.services.profile_service import ProfileService
 from app.core.exceptions import NotFoundError

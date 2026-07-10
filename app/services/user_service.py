@@ -1,7 +1,5 @@
 from datetime import timedelta, timezone, datetime
-
 from beanie.operators import Set
-
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.core.security import hash_password, verify_password, create_access_token
@@ -28,7 +26,6 @@ def _to_response(user: User) -> UserResponse:
 
 class UserService:
     # Auth
-    # ------------------------------------------------------------------
     async def register(self, payload: UserRegisterRequest) -> UserResponse:
         if await User.find_one(User.email == payload.email):
             raise ConflictError("Email already registered.")
@@ -61,8 +58,6 @@ class UserService:
         )
 
     # CRUD
-    # ------------------------------------------------------------------
-
     async def get_by_id(self, user_id: str) -> UserResponse:
         user = await User.get(user_id)
         if not user:

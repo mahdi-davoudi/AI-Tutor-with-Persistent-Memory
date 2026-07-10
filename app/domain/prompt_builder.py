@@ -56,7 +56,7 @@ class PromptBuilder:
                 + style_line
             )
 
-        # --- Raw Memories ---
+        # Raw Memories
         if memories:
             mem_lines = [f"  - {m.key}: {m.value}" for m in memories]
             sections.append("User Memory Notes:\n" + "\n".join(mem_lines))

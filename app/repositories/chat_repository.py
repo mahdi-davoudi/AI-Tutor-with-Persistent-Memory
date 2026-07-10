@@ -4,7 +4,6 @@ from app.models.chat import Message, ChatSession
 
 class ChatRepository:
     # Sessions
-    # --------------------
     async def get_session(self, session_id: str):
         return await ChatSession.get(session_id)
 
@@ -16,7 +15,6 @@ class ChatRepository:
         await session.replace()
 
     # Messages
-    # --------------------
     async def create_message(self, message: Message):
         await message.insert()
         return message

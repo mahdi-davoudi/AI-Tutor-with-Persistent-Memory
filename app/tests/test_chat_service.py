@@ -1,12 +1,8 @@
 import pytest
 from types import SimpleNamespace
-
 from services.chat_service import ChatService
 
-
-# --------------------
 # Fake Repository
-# --------------------
 
 class FakeRepository:
 
@@ -31,11 +27,7 @@ class FakeRepository:
     async def update_session(self, session):
         return session
 
-
-# --------------------
 # Fake LLM
-# --------------------
-
 class FakeLLM:
 
     async def generate(self, messages):
@@ -43,11 +35,6 @@ class FakeLLM:
             "سلام، من پاسخ تستی هستم",
             15,
         )
-
-
-# --------------------
-# Test
-# --------------------
 
 @pytest.mark.asyncio
 async def test_send_message():

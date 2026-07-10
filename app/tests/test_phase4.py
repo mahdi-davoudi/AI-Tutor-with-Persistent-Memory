@@ -1,16 +1,6 @@
-"""
-تست فاز ۴ — بدون DB، بدون HTTP
-pytest tests/test_phase4.py -v
-"""
-
 import pytest
 from app.domain.prompt_builder import PromptBuilder
 from app.schemas.learning_profile import LearningProfileSummary, TopicProfileSchema
-
-
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
 
 def make_profile(topics: dict, style=None) -> LearningProfileSummary:
     return LearningProfileSummary(
@@ -34,10 +24,6 @@ class FakeMemory:
         self.key = key
         self.value = value
 
-
-# ─────────────────────────────────────────────
-# PromptBuilder
-# ─────────────────────────────────────────────
 
 class TestPromptBuilder:
 
@@ -106,7 +92,7 @@ class TestPromptBuilder:
         assert messages[-1]["content"] == "hello"
 
     def test_empty_profile_no_profile_section(self):
-        profile = make_profile({})  # بدون هیچ topic
+        profile = make_profile({})  
         messages = PromptBuilder.build([], "hello", profile=profile)
         system = messages[0]["content"]
         assert "Learning Profile" not in system
@@ -122,7 +108,6 @@ class TestPromptBuilder:
         assert "mongodb" in system
 
     def test_history_roles_filtered(self):
-        # role های غیر user/assistant باید filter بشن
         history = [
             {"role": "system",    "content": "old system"},
             {"role": "user",      "content": "hi"},
@@ -130,4 +115,4 @@ class TestPromptBuilder:
         ]
         messages = PromptBuilder.build(history, "new message")
         roles = [m["role"] for m in messages]
-        assert roles.count("system") == 1  # فقط یه system داریم
+        assert roles.count("system") == 1  

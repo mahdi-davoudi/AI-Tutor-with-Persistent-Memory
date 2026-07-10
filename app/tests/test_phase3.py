@@ -4,8 +4,6 @@ from app.domain.mastery_estimator import MasteryEstimator
 from app.services.profile_service import ProfileService
 
 # Fixtures
-# ─────────────────────────────────────────────
-
 def mem(topic, key, memory_type, value, importance=0.7, frequency=1):
     return {
         "topic": topic,
@@ -17,8 +15,6 @@ def mem(topic, key, memory_type, value, importance=0.7, frequency=1):
     }
 
 # SkillTracker
-# ─────────────────────────────────────────────
-
 class TestSkillTracker:
 
     def test_groups_by_topic(self):
@@ -91,8 +87,6 @@ class TestSkillTracker:
         assert "beginner" not in subtopics  
 
 # MasteryEstimator
-# ─────────────────────────────────────────────
-
 def make_skill_map(entries):
     skill_map = {}
     for e in entries:

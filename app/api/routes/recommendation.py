@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.services.recommendation_service import RecommendationService
-from app.schemas.recommendation import RecommendationResponse, RecommendationRequest
+from app.services.profile_service import ProfileService
+from app.schemas.recommendation import RecommendationResponse
 from app.core.security import get_current_user
 from app.core.exceptions import NotFoundError
+from app.models.user import User
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -16,10 +18,19 @@ async def get_recommendations(
     user_id: str,
     force_refresh: bool = False,
     service: RecommendationService = Depends(get_recommendation_service),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    # Fetch learning profile from user (assumes learning_profile stored on user model)
-    learning_profile = getattr(current_user, "learning_profile", {}) or {}
+    if str(current_user.id) != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own recommendations.",
+        )
+
+    try:
+        profile_response = await ProfileService().get_profile(user_id)
+        learning_profile = profile_response.model_dump()
+    except NotFoundError:
+        learning_profile = {}
 
     rec = await service.get_or_generate(
         user_id=user_id,
@@ -42,8 +53,14 @@ async def get_recommendations(
 async def delete_recommendations(
     user_id: str,
     service: RecommendationService = Depends(get_recommendation_service),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    if str(current_user.id) != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own recommendations.",
+        )
+
     deleted = await service.delete(user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Recommendation not found")

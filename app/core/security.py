@@ -1,15 +1,45 @@
+from app.core.exceptions import AuthenticationError
 from datetime import datetime, timedelta, timezone
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+from app.core.config import get_settings
+from app.models.user import User
+from jose import JWTError, jwt
 from typing import Any
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-
-from app.core.config import get_settings
-from app.core.exceptions import AuthenticationError
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = "HS256"
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    try:
+        user_id = decode_access_token(token)
+    except AuthenticationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = await User.get(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
+        )
+
+    return user
+
 
 def hash_password(plain: str) -> str:
     return _pwd_context.hash(plain)

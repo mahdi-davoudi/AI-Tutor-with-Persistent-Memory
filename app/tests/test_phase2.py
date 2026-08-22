@@ -6,27 +6,34 @@ from app.schemas.memory import UpsertMemoryRequest
 
 # 1. MemoryExtractor Tests
 
-class FakeLLM:
-    def __init__(self, response: str):
-        self.response = response
+import json
 
-    async def generate(self, messages):
-        return self.response, 10
+class FakeLLM:
+    def __init__(self, structured_response: dict = None, raise_error: Exception = None):
+        self.structured_response = structured_response
+        self.raise_error = raise_error
+
+    async def generate_structured(self, messages, schema, schema_name="structured_response"):
+        if self.raise_error:
+            raise self.raise_error
+        return self.structured_response, 10
 
 
 @pytest.mark.asyncio
 async def test_extractor_returns_valid_memories():
-    fake_response = '''[
-        {
-            "key": "python_beginner",
-            "value": "user is a beginner in python",
-            "importance": 0.9,
-            "confidence": 0.85,
-            "memory_type": "skill_level",
-            "topic": "python"
-        }
-    ]'''
-    extractor = MemoryExtractor(llm=FakeLLM(fake_response))
+    fake_response = {
+        "memories": [
+            {
+                "key": "python_beginner",
+                "value": "user is a beginner in python",
+                "importance": 0.9,
+                "confidence": 0.85,
+                "memory_type": "skill_level",
+                "topic": "python",
+            }
+        ]
+    }
+    extractor = MemoryExtractor(llm=FakeLLM(structured_response=fake_response))
     result = await extractor.extract(
         user_message="I am learning python and I am a beginner",
         assistant_response="Great! Let's start with the basics.",
@@ -41,7 +48,7 @@ async def test_extractor_returns_valid_memories():
 
 @pytest.mark.asyncio
 async def test_extractor_returns_empty_on_no_content():
-    extractor = MemoryExtractor(llm=FakeLLM("[]"))
+    extractor = MemoryExtractor(llm=FakeLLM(structured_response={"memories": []}))
     result = await extractor.extract(
         user_message="hello",
         assistant_response="hi there!",
@@ -51,7 +58,8 @@ async def test_extractor_returns_empty_on_no_content():
 
 @pytest.mark.asyncio
 async def test_extractor_handles_invalid_json():
-    extractor = MemoryExtractor(llm=FakeLLM("this is not json"))
+    error = json.JSONDecodeError("Expecting value", "doc", 0)
+    extractor = MemoryExtractor(llm=FakeLLM(raise_error=error))
     result = await extractor.extract(
         user_message="hello",
         assistant_response="hi",
@@ -60,18 +68,27 @@ async def test_extractor_handles_invalid_json():
 
 
 @pytest.mark.asyncio
+async def test_extractor_handles_llm_failure():
+    extractor = MemoryExtractor(llm=FakeLLM(raise_error=Exception("HTTP 503")))
+    result = await extractor.extract("hello", "hi")
+    assert result == []
+
+
+@pytest.mark.asyncio
 async def test_extractor_clamps_importance_and_confidence():
-    fake_response = '''[
-        {
-            "key": "test_key",
-            "value": "test value",
-            "importance": 99.9,
-            "confidence": -5.0,
-            "memory_type": "learning_topic",
-            "topic": "test"
-        }
-    ]'''
-    extractor = MemoryExtractor(llm=FakeLLM(fake_response))
+    fake_response = {
+        "memories": [
+            {
+                "key": "test_key",
+                "value": "test value",
+                "importance": 99.9,
+                "confidence": -5.0,
+                "memory_type": "learning_topic",
+                "topic": "test",
+            }
+        ]
+    }
+    extractor = MemoryExtractor(llm=FakeLLM(structured_response=fake_response))
     result = await extractor.extract("test", "test")
     assert result[0]["importance"] == 1.0
     assert result[0]["confidence"] == 0.0
@@ -79,34 +96,39 @@ async def test_extractor_clamps_importance_and_confidence():
 
 @pytest.mark.asyncio
 async def test_extractor_fixes_invalid_memory_type():
-    fake_response = '''[
-        {
-            "key": "test_key",
-            "value": "test value",
-            "importance": 0.5,
-            "confidence": 0.5,
-            "memory_type": "invalid_type_xyz",
-            "topic": "test"
-        }
-    ]'''
-    extractor = MemoryExtractor(llm=FakeLLM(fake_response))
+    fake_response = {
+        "memories": [
+            {
+                "key": "test_key",
+                "value": "test value",
+                "importance": 0.5,
+                "confidence": 0.5,
+                "memory_type": "invalid_type_xyz",
+                "topic": "test",
+            }
+        ]
+    }
+    extractor = MemoryExtractor(llm=FakeLLM(structured_response=fake_response))
     result = await extractor.extract("test", "test")
     assert result[0]["memory_type"] == "learning_topic"
 
 
 @pytest.mark.asyncio
 async def test_extractor_skips_items_without_key_or_value():
-    fake_response = '''[
-        {"value": "no key here", "importance": 0.5},
-        {"key": "no_value_here", "importance": 0.5},
-        {"key": "valid_key", "value": "valid value", "importance": 0.7,
-         "confidence": 0.8, "memory_type": "learning_topic", "topic": "test"}
-    ]'''
-    extractor = MemoryExtractor(llm=FakeLLM(fake_response))
+    fake_response = {
+        "memories": [
+            {"value": "no key here", "importance": 0.5},
+            {"key": "no_value_here", "importance": 0.5},
+            {
+                "key": "valid_key", "value": "valid value", "importance": 0.7,
+                "confidence": 0.8, "memory_type": "learning_topic", "topic": "test",
+            },
+        ]
+    }
+    extractor = MemoryExtractor(llm=FakeLLM(structured_response=fake_response))
     result = await extractor.extract("test", "test")
     assert len(result) == 1
     assert result[0]["key"] == "valid_key"
-
 # 2. MemoryService Scoring Tests
 
 class FakeMemory:

@@ -1,5 +1,7 @@
 import httpx
 from app.core.config import get_settings
+import json  
+
 
 
 class LLMService:
@@ -16,6 +18,7 @@ class LLMService:
         self.model_id = settings.hf_model_id
         self.api_url = "https://router.huggingface.co/v1/chat/completions"
 
+    
     async def generate(
         self,
         messages: list[dict],
@@ -27,7 +30,7 @@ class LLMService:
 
         payload = {
             "model": self.model_id,
-            "messages": messages, 
+            "messages": messages,
             "max_tokens": 512,
             "temperature": 0.7,
         }
@@ -41,3 +44,40 @@ class LLMService:
         tokens = data["usage"]["total_tokens"]
 
         return text, tokens
+
+    async def generate_structured(
+        self,
+        messages: list[dict],
+        schema: dict,
+        schema_name: str = "structured_response",
+    ) -> tuple[dict, int]:
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": self.model_id,
+            "messages": messages,
+            "max_tokens": 512,
+            "temperature": 0.7,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "schema": schema,
+                    "strict": True,
+                },
+            },
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(self.api_url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        raw_content = data["choices"][0]["message"]["content"].strip()
+        tokens = data["usage"]["total_tokens"]
+
+        parsed = json.loads(raw_content)
+        return parsed, tokens

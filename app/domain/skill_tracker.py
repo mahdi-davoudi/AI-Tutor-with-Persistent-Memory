@@ -42,20 +42,27 @@ class SkillTracker:
             memory_type = (mem.get("memory_type") or "general").strip().lower()
             importance = float(mem.get("importance", 0.5))
             frequency = int(mem.get("frequency", 1))
-            value = (mem.get("value") or "").lower()
+            value = (mem.get("value") or "").strip().lower()
             key = (mem.get("key") or "").strip().lower()
 
-            raw = key[len(topic) + 1:] if key.startswith(f"{topic}_") else key
-            raw = raw.removesuffix("_skill").removesuffix("_level")
-            subtopic = raw
+            if memory_type in ("weak_area", "strong_area") and value:
+                subtopic = value.replace(" ", "_")
+            else:
+                raw = key[len(topic) + 1:] if key.startswith(f"{topic}_") else key
+                raw = raw.removesuffix("_skill").removesuffix("_level")
+                subtopic = raw
 
-            if not subtopic or subtopic in _INVALID_SUBTOPICS:
-                subtopic = memory_type
+                if not subtopic or subtopic in _INVALID_SUBTOPICS:
+                    subtopic = memory_type
 
             if not subtopic:
                 continue
 
             tag = SkillTracker._resolve_tag(memory_type, value)
+
+            if memory_type == "skill_level":
+                tag = "neutral"
+
             level_hint = (
                 SkillTracker._parse_level(value)
                 if memory_type == "skill_level"

@@ -50,6 +50,7 @@ class LLMService:
         messages: list[dict],
         schema: dict,
         schema_name: str = "structured_response",
+        max_tokens: int = 1500,
     ) -> tuple[dict, int]:
         headers = {
             "Authorization": f"Bearer {self.api_token}",
@@ -59,7 +60,7 @@ class LLMService:
         payload = {
             "model": self.model_id,
             "messages": messages,
-            "max_tokens": 512,
+            "max_tokens": max_tokens,
             "temperature": 0.7,
             "response_format": {
                 "type": "json_schema",
@@ -81,7 +82,6 @@ class LLMService:
 
         parsed = json.loads(raw_content)
         return parsed, tokens
-    
     
     async def generate_with_tools(
         self,

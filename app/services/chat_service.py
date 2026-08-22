@@ -1,10 +1,14 @@
-from datetime import datetime, timezone
-from app.models.chat import Message, ChatSession
 from app.repositories.chat_repository import ChatRepository
-from app.domain.prompt_builder import PromptBuilder
-from app.domain.session_policy import SessionPolicy
-from app.services.llm_service import LLMService
 from app.services.profile_service import ProfileService
+from app.domain.session_policy import SessionPolicy
+from app.domain.prompt_builder import PromptBuilder
+from app.domain.tool_executor import ToolExecutor
+from app.models.chat import Message, ChatSession
+from app.services.llm_service import LLMService
+from app.domain.tools import AVAILABLE_TOOLS
+from datetime import datetime, timezone
+import json
+
 
 
 class ChatService:
@@ -72,6 +76,49 @@ class ChatService:
             import traceback
             traceback.print_exc()
 
+
+    MAX_TOOL_ITERATIONS = 3
+    async def _generate_with_tools(self, messages: list[dict], user_id: str) -> tuple[str, int]:
+        executor = ToolExecutor(user_id=user_id)
+        total_tokens = 0
+        working_messages = list(messages)
+
+        for _ in range(self.MAX_TOOL_ITERATIONS):
+            result = await self.llm.generate_with_tools(
+                messages=working_messages,
+                tools=AVAILABLE_TOOLS,
+            )
+            total_tokens += result["tokens"]
+
+            tool_calls = result["tool_calls"]
+            if not tool_calls:
+                return result["content"] or "", total_tokens
+
+            working_messages.append({
+                "role": "assistant",
+                "content": result["content"],
+                "tool_calls": tool_calls,
+            })
+
+            for call in tool_calls:
+                fn_name = call["function"]["name"]
+                try:
+                    fn_args = json.loads(call["function"]["arguments"] or "{}")
+                except json.JSONDecodeError:
+                    fn_args = {}
+
+                tool_result = await executor.execute(fn_name, fn_args)
+
+                working_messages.append({
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": tool_result,
+                })
+
+        answer, tokens = await self.llm.generate(working_messages)
+        return answer, total_tokens + tokens
+    
+    
     async def send_message(self, user_id: str, content: str):
 
         # 1. Get or create session
@@ -105,8 +152,8 @@ class ChatService:
         messages = PromptBuilder.build(history_dict, content, memories, profile)
 
         # 6. Call LLM
-        answer, tokens = await self.llm.generate(messages)
-
+        answer, tokens = await self._generate_with_tools(messages, user_id=user_id)
+        
         # 7. Save assistant message
         assistant_msg = Message(
             session_id=session_id,

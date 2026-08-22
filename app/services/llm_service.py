@@ -81,3 +81,37 @@ class LLMService:
 
         parsed = json.loads(raw_content)
         return parsed, tokens
+    
+    
+    async def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> dict:
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": self.model_id,
+            "messages": messages,
+            "max_tokens": 512,
+            "temperature": 0.7,
+            "tools": tools,
+            "tool_choice": "auto",
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(self.api_url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        message = data["choices"][0]["message"]
+        tokens = data["usage"]["total_tokens"]
+
+        return {
+            "content": message.get("content"),
+            "tool_calls": message.get("tool_calls") or [],
+            "tokens": tokens,
+        }

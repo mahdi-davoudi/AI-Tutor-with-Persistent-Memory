@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.exceptions import ConflictError, NotFoundError, AuthenticationError
+from app.core.security import get_current_user
+from app.models.user import User
 from app.schemas.user import (
     UserRegisterRequest,
     UserLoginRequest,
@@ -57,7 +59,11 @@ async def login(
 async def get_user(
     user_id: str,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
 ) -> UserResponse:
+    if str(current_user.id) != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed.")
+
     try:
         return await service.get_by_id(user_id)
     except NotFoundError as exc:
@@ -74,7 +80,11 @@ async def update_user(
     user_id: str,
     body: UserUpdateRequest,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
 ) -> UserResponse:
+    if str(current_user.id) != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed.")
+
     try:
         return await service.update(user_id, body)
     except NotFoundError as exc:
@@ -91,7 +101,11 @@ async def update_user(
 async def delete_user(
     user_id: str,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
 ) -> None:
+    if str(current_user.id) != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed.")
+
     try:
         await service.delete(user_id)
     except NotFoundError as exc:

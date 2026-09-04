@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
+from app.core.security import get_current_user
 from app.domain.memory_extractor import MemoryExtractor
 from app.models.chat import ChatSession
+from app.models.user import User
 from app.repositories.chat_repository import ChatRepository
 from app.schemas.chat import ChatMessageCreate, ChatMessageResponse
 from app.services.chat_service import ChatService
@@ -44,7 +46,11 @@ def get_chat_service() -> ChatService:
 async def send_message(
     body: ChatMessageCreate,
     service: ChatService = Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
 ) -> ChatMessageResponse:
+    if str(current_user.id) != body.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed.")
+        
     try:
         
         result = await service.send_message(
@@ -57,25 +63,23 @@ async def send_message(
             session_id=result["session_id"],
             tokens_used=result["assistant_message"].tokens_used,
         )
-
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         )
-
+    
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=exc.message,
         )
-
+    
     except Exception as exc:
         import traceback
-
         traceback.print_exc()
-
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
+    

@@ -13,6 +13,8 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.core.database import connect_db, disconnect_db
+from app.core.vector_db import connect_vector_db, disconnect_vector_db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,10 +27,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting up...")
     await connect_db(app)
+    await connect_vector_db(app)
     yield
     logger.info("Shutting down...")
+    await disconnect_vector_db(app)
     await disconnect_db(app)
-
 
 def create_app() -> FastAPI:
     settings = get_settings()

@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     
     hf_api_token: str = ""
     hf_model_id: str = "mistralai/Mistral-7B-Instruct-v0.2"
+    
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
+    qdrant_collection_name: str = "memory_vectors"
+    embedding_dim: int = 384
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"

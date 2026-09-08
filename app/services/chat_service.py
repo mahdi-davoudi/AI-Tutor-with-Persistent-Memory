@@ -142,14 +142,19 @@ class ChatService:
             for m in history
         ]
 
-        # 4. Load memories
-        memories = await self.memory_service.list_memories(user_id)
-
+        # 4. Load relevant memories (semantic search against current message)
+        memories = await self.memory_service.search_similar(user_id, content, limit=5)
+        if not memories:
+            memories = await self.memory_service.list_memories(user_id, min_importance=0.5)
+            
         # 4.5 Load learning profile 
         profile = await ProfileService().get_summary(user_id)
 
         # 5. Build prompt 
         messages = PromptBuilder.build(history_dict, content, memories, profile)
+        print("=" * 50)
+        print("SYSTEM PROMPT:", messages[0]["content"])
+        print("=" * 50)
 
         # 6. Call LLM
         answer, tokens = await self._generate_with_tools(messages, user_id=user_id)

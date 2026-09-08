@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from beanie.operators import Set, Inc
+from beanie.operators import Set, Inc, In
 from qdrant_client.models import (
     FieldCondition,
     Filter,
@@ -17,7 +17,7 @@ from app.core.vector_db import get_qdrant_client
 from app.models.memory import Memory
 from app.schemas.memory import MemoryResponse, UpsertMemoryRequest
 from app.services.embedding_service import get_embedding_service
-
+from beanie import PydanticObjectId
 logger = logging.getLogger(__name__)
 
 
@@ -93,6 +93,42 @@ class MemoryService:
             Memory.importance >= min_importance,
         ).sort(-Memory.importance).to_list()
         return [_to_response(m) for m in memories]
+    async def search_similar(
+        self,
+        user_id: str,
+        query_text: str,
+        limit: int = 5,
+    ) -> list[Memory]:
+        try:
+            settings = get_settings()
+            embedding_service = get_embedding_service()
+            client = get_qdrant_client()
+
+            query_vector = await embedding_service.embed(query_text)
+
+            result = await client.query_points(
+                collection_name=settings.qdrant_collection_name,
+                query=query_vector,
+                query_filter=Filter(
+                    must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+                ),
+                limit=limit,
+            )
+
+            memory_ids = [point.payload["memory_id"] for point in result.points]
+            if not memory_ids:
+                return []
+
+            memories = await Memory.find(
+                In(Memory.id, [PydanticObjectId(mid) for mid in memory_ids])
+            ).to_list()
+
+            order = {mid: i for i, mid in enumerate(memory_ids)}
+            memories.sort(key=lambda m: order.get(str(m.id), len(memory_ids)))
+            return memories
+        except Exception as exc:
+            logger.warning(f"Semantic memory search failed for user {user_id}: {exc}")
+            return []
 
     async def get(self, user_id: str, memory_id: str) -> MemoryResponse:
         memory = await self._fetch_owned(user_id, memory_id)

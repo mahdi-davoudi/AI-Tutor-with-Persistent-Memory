@@ -15,6 +15,7 @@ from app.core.exceptions import (
 )
 from app.core.database import connect_db, disconnect_db
 from app.core.vector_db import connect_vector_db, disconnect_vector_db
+from app.api.routes.documents import router as documents_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,7 +111,8 @@ def create_app() -> FastAPI:
     app.include_router(profile_router, prefix="/api/v1")
     app.include_router(recommendation.router)
     app.include_router(quiz.router, prefix="/api/v1")
-
+    app.include_router(documents_router, prefix="/api/v1")
+    
     # Health check
     @app.get("/health", tags=["system"])
     async def health():

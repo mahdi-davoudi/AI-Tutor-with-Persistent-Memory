@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
     qdrant_collection_name: str = "memory_vectors"
+    qdrant_document_collection_name: str = "document_chunks"
     embedding_dim: int = 384
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     

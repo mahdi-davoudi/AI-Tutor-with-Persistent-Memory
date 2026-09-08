@@ -3,6 +3,10 @@ from beanie import init_beanie
 import logging
 from app.core.config import get_settings
 
+from app.models.recommendation import Recommendation
+from app.models.document import UserDocument
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +31,7 @@ async def connect_db(app) -> None:
     
     await init_beanie(
         database=database,
-        document_models=[User, ChatSession, Message, Memory, LearningProfile, Recommendation, Quiz], 
+        document_models=[User, ChatSession, Message, Memory, LearningProfile, Recommendation, Quiz, UserDocument], 
     )
     app.state.mongo_client = client
     app.state.mongo_db = database

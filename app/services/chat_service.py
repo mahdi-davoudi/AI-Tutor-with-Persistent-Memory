@@ -1,4 +1,5 @@
 from app.repositories.chat_repository import ChatRepository
+from app.services.document_service import DocumentService
 from app.services.profile_service import ProfileService
 from app.domain.session_policy import SessionPolicy
 from app.domain.prompt_builder import PromptBuilder
@@ -13,12 +14,12 @@ import json
 
 class ChatService:
 
-    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor):
+    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor, document_service=None):
         self.repo = repo
         self.llm = llm
         self.memory_service = memory_service
         self.memory_extractor = memory_extractor
-
+        self.document_service = document_service or DocumentService()
     async def _get_or_create_session(self, user_id: str) -> ChatSession:
         sessions = (
             await ChatSession.find(ChatSession.user_id == user_id)
@@ -149,9 +150,12 @@ class ChatService:
             
         # 4.5 Load learning profile 
         profile = await ProfileService().get_summary(user_id)
+        
+        # 4.6 Load relevant document chunks (RAG)
+        document_chunks = await self.document_service.search(user_id, content, limit=3)
 
         # 5. Build prompt 
-        messages = PromptBuilder.build(history_dict, content, memories, profile)
+        messages = PromptBuilder.build(history_dict, content, memories, profile, document_chunks)
         print("=" * 50)
         print("SYSTEM PROMPT:", messages[0]["content"])
         print("=" * 50)

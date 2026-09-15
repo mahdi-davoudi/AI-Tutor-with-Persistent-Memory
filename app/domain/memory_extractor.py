@@ -8,6 +8,8 @@ Extract learning-related facts from the conversation below.
 
 Rules:
 - Maximum 5 items per conversation.
+- Only extract facts ABOUT THE USER: their skill level, preferences, weak areas, strong areas, or topics they are actively learning.
+- NEVER extract facts, data, citations, page numbers, or details that came from a document or external source quoted in the assistant's answer (e.g. "the file mentions X on page 15"). That is document content, not a fact about the user.
 - Only extract facts that are genuinely useful for personalizing future tutoring.
 - For importance: 0.9+ = critical gaps or strong skills, 0.6-0.8 = useful context, below 0.5 = skip it.
 - If nothing meaningful, return an empty memories array.

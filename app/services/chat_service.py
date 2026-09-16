@@ -6,7 +6,7 @@ from app.domain.session_policy import SessionPolicy
 from app.domain.session_summarizer import SessionSummarizer
 from app.domain.tool_executor import ToolExecutor
 from app.domain.tools import AVAILABLE_TOOLS
-from app.models.chat import ChatSession, Message
+from app.models.chat import ChatSession
 from app.repositories.chat_repository import ChatRepository
 from app.schemas.memory import UpsertMemoryRequest
 from app.services.document_service import DocumentService
@@ -126,13 +126,12 @@ class ChatService:
         session_id = str(session.id)
         logger.debug("session_id=%s user_id=%s", session_id, user_id)
 
-        user_msg = Message(
+        user_msg = await self.repo.create_message(
             session_id=session_id,
             role="user",
             content=content,
         )
-        await self.repo.create_message(user_msg)
-
+        
         history = await self.repo.get_messages(session_id, limit=20)
         history_dict = [{"role": m.role, "content": m.content} for m in history]
 
@@ -156,14 +155,13 @@ class ChatService:
 
         answer, tokens = await self._generate_with_tools(messages, user_id=user_id)
 
-        assistant_msg = Message(
+        assistant_msg = await self.repo.create_message(
             session_id=session_id,
             role="assistant",
             content=answer,
             tokens_used=tokens,
         )
-        await self.repo.create_message(assistant_msg)
-
+        
         await self._extract_and_store_memories(
             user_id=user_id,
             session_id=session_id,

@@ -29,7 +29,19 @@ class ChatRepository:
     async def update_session(self, session: ChatSession) -> None:
         await session.replace()
 
-    async def create_message(self, message: Message) -> Message:
+    async def create_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        tokens_used: int | None = None,
+    ) -> Message:
+        message = Message(
+            session_id=session_id,
+            role=role,
+            content=content,
+            tokens_used=tokens_used,
+        )
         await message.insert()
         return message
 

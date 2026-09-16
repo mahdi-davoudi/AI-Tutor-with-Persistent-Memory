@@ -93,11 +93,16 @@ async def test_get_learning_progress_found():
     )
     fake_summary = make_fake_summary({"python": fake_topic})
 
-    with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
-        MockProfileService.return_value.get_summary = AsyncMock(return_value=fake_summary)
-
-        executor = ToolExecutor(user_id="u1")
-        result = json.loads(await executor.execute("get_learning_progress", {"topic": "Python"}))
+    # with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
+    #     MockProfileService.return_value.get_summary = AsyncMock(return_value=fake_summary)
+    #     executor = ToolExecutor(user_id="u1")
+        
+    profile_service = SimpleNamespace(
+        get_summary=AsyncMock(side_effect=Exception("DB down"))
+    )
+    executor = ToolExecutor(user_id="u1", profile_service=SimpleNamespace())
+    
+    result = json.loads(await executor.execute("get_learning_progress", {"topic": "Python"}))
 
     assert result["found"] is True
     assert result["topic"] == "python"
@@ -198,7 +203,13 @@ async def test_generate_with_tools_executes_tool_and_returns_final_answer():
     with patch("app.services.chat_service.ToolExecutor") as MockExecutor:
         MockExecutor.return_value.execute = AsyncMock(return_value=fake_tool_result)
 
-        service = ChatService(repo=None, llm=fake_llm, memory_service=None, memory_extractor=None)
+        service = ChatService(repo=None,
+            llm=fake_llm,
+            memory_service=None,
+            memory_extractor=None,
+            document_service=None,
+            profile_service=None,
+            )
         answer, tokens = await service._generate_with_tools(
             messages=[{"role": "user", "content": "how am I doing in python?"}], user_id="u1",
         )

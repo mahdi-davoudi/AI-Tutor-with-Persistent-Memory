@@ -1,10 +1,13 @@
-import pytest
-from app.domain.recommendation_engine import RecommendationEngine
 import json
 from types import SimpleNamespace
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from app.domain.recommendation_engine import RecommendationEngine
 from app.domain.tool_executor import ToolExecutor
 from app.services.chat_service import ChatService
+
 
 class FakeLLM:
     def __init__(self, structured_response: dict = None, raise_error: Exception = None):
@@ -72,7 +75,6 @@ async def test_recommendation_handles_llm_failure_gracefully():
 
 @pytest.mark.asyncio
 async def test_recommendation_handles_malformed_llm_response():
-  
     fake_response = {"suggested_topics": ["loops"]}
     engine = RecommendationEngine(llm_service=FakeLLM(structured_response=fake_response))
 
@@ -81,9 +83,29 @@ async def test_recommendation_handles_malformed_llm_response():
     assert result["suggested_topics"] == ["loops"]
     assert result["weak_areas"] == []
     assert result["learning_path"] == []
-    
+
+
 def make_fake_summary(topics: dict):
     return SimpleNamespace(topics=topics)
+
+
+def make_executor(summary=None, error=None):
+    if error is not None:
+        profile_service = SimpleNamespace(get_summary=AsyncMock(side_effect=error))
+    else:
+        profile_service = SimpleNamespace(get_summary=AsyncMock(return_value=summary))
+    return ToolExecutor(user_id="u1", profile_service=profile_service)
+
+
+def make_chat_service(llm):
+    return ChatService(
+        repo=None,
+        llm=llm,
+        memory_service=None,
+        memory_extractor=None,
+        document_service=None,
+        profile_service=SimpleNamespace(),
+    )
 
 
 @pytest.mark.asyncio
@@ -93,15 +115,7 @@ async def test_get_learning_progress_found():
     )
     fake_summary = make_fake_summary({"python": fake_topic})
 
-    # with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
-    #     MockProfileService.return_value.get_summary = AsyncMock(return_value=fake_summary)
-    #     executor = ToolExecutor(user_id="u1")
-        
-    profile_service = SimpleNamespace(
-        get_summary=AsyncMock(side_effect=Exception("DB down"))
-    )
-    executor = ToolExecutor(user_id="u1", profile_service=SimpleNamespace())
-    
+    executor = make_executor(summary=fake_summary)
     result = json.loads(await executor.execute("get_learning_progress", {"topic": "Python"}))
 
     assert result["found"] is True
@@ -114,11 +128,8 @@ async def test_get_learning_progress_found():
 async def test_get_learning_progress_not_found():
     fake_summary = make_fake_summary({})
 
-    with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
-        MockProfileService.return_value.get_summary = AsyncMock(return_value=fake_summary)
-
-        executor = ToolExecutor(user_id="u1")
-        result = json.loads(await executor.execute("get_learning_progress", {"topic": "rust"}))
+    executor = make_executor(summary=fake_summary)
+    result = json.loads(await executor.execute("get_learning_progress", {"topic": "rust"}))
 
     assert result["found"] is False
     assert result["topic"] == "rust"
@@ -130,11 +141,8 @@ async def test_list_weak_areas_filters_only_weak_topics():
     strong_topic = SimpleNamespace(mastery=0.9, level="advanced", strong=["oop"], weak=[])
     fake_summary = make_fake_summary({"python": weak_topic, "sql": strong_topic})
 
-    with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
-        MockProfileService.return_value.get_summary = AsyncMock(return_value=fake_summary)
-
-        executor = ToolExecutor(user_id="u1")
-        result = json.loads(await executor.execute("list_weak_areas", {}))
+    executor = make_executor(summary=fake_summary)
+    result = json.loads(await executor.execute("list_weak_areas", {}))
 
     assert len(result["weak_areas"]) == 1
     assert result["weak_areas"][0]["topic"] == "python"
@@ -143,22 +151,19 @@ async def test_list_weak_areas_filters_only_weak_topics():
 
 @pytest.mark.asyncio
 async def test_unknown_tool_returns_error():
-    executor = ToolExecutor(user_id="u1")
+    executor = make_executor(summary=make_fake_summary({}))
     result = json.loads(await executor.execute("delete_everything", {}))
     assert "error" in result
 
 
 @pytest.mark.asyncio
 async def test_tool_executor_handles_service_exception():
-    with patch("app.domain.tool_executor.ProfileService") as MockProfileService:
-        MockProfileService.return_value.get_summary = AsyncMock(side_effect=Exception("DB down"))
-
-        executor = ToolExecutor(user_id="u1")
-        result = json.loads(await executor.execute("get_learning_progress", {"topic": "python"}))
+    executor = make_executor(error=Exception("DB down"))
+    result = json.loads(await executor.execute("get_learning_progress", {"topic": "python"}))
 
     assert "error" in result
-    
-    
+
+
 class FakeLLMWithTools:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -177,7 +182,7 @@ async def test_generate_with_tools_no_tool_call_returns_directly():
     fake_llm = FakeLLMWithTools([
         {"content": "Hello! I can help with that.", "tool_calls": [], "tokens": 20},
     ])
-    service = ChatService(repo=None, llm=fake_llm, memory_service=None, memory_extractor=None)
+    service = make_chat_service(fake_llm)
 
     answer, tokens = await service._generate_with_tools(
         messages=[{"role": "user", "content": "hi"}], user_id="u1",
@@ -203,13 +208,7 @@ async def test_generate_with_tools_executes_tool_and_returns_final_answer():
     with patch("app.services.chat_service.ToolExecutor") as MockExecutor:
         MockExecutor.return_value.execute = AsyncMock(return_value=fake_tool_result)
 
-        service = ChatService(repo=None,
-            llm=fake_llm,
-            memory_service=None,
-            memory_extractor=None,
-            document_service=None,
-            profile_service=None,
-            )
+        service = make_chat_service(fake_llm)
         answer, tokens = await service._generate_with_tools(
             messages=[{"role": "user", "content": "how am I doing in python?"}], user_id="u1",
         )
@@ -239,7 +238,7 @@ async def test_generate_with_tools_handles_invalid_arguments_json():
     with patch("app.services.chat_service.ToolExecutor") as MockExecutor:
         MockExecutor.return_value.execute = AsyncMock(return_value=json.dumps({"weak_areas": []}))
 
-        service = ChatService(repo=None, llm=fake_llm, memory_service=None, memory_extractor=None)
+        service = make_chat_service(fake_llm)
         answer, tokens = await service._generate_with_tools(
             messages=[{"role": "user", "content": "what are my weak areas?"}], user_id="u1",
         )
@@ -263,11 +262,10 @@ async def test_generate_with_tools_hits_max_iterations_and_falls_back():
     with patch("app.services.chat_service.ToolExecutor") as MockExecutor:
         MockExecutor.return_value.execute = AsyncMock(return_value=json.dumps({"weak_areas": []}))
 
-        service = ChatService(repo=None, llm=fake_llm, memory_service=None, memory_extractor=None)
+        service = make_chat_service(fake_llm)
         answer, tokens = await service._generate_with_tools(
             messages=[{"role": "user", "content": "loop forever"}], user_id="u1",
         )
 
-    # بعد از MAX_TOOL_ITERATIONS دور (۳ تا)، باید بره سراغ generate() عادی
     assert answer == "fallback answer"
     assert tokens == 30 + 5

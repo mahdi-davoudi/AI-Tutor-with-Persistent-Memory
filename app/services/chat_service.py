@@ -15,7 +15,7 @@ from app.domain.session_summarizer import SessionSummarizer
 
 class ChatService:
 
-    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor, document_service=None):
+    def __init__(self, repo: ChatRepository, llm: LLMService, memory_service, memory_extractor, document_service=None, summarizer=None):
         self.repo = repo
         self.llm = llm
         self.memory_service = memory_service

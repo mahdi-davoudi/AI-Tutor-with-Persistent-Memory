@@ -11,9 +11,12 @@ class PromptBuilder:
         memories: list = None,
         profile: Optional[LearningProfileSummary] = None,
         document_chunks: list = None,
+        session_summary: Optional[str] = None,
     ) -> list[dict]:
 
-        system_prompt = PromptBuilder._build_system_prompt(memories, profile, document_chunks)
+        system_prompt = PromptBuilder._build_system_prompt(
+            memories, profile, document_chunks, session_summary
+        )
         messages = [{"role": "system", "content": system_prompt}]
 
         for m in history:
@@ -28,12 +31,22 @@ class PromptBuilder:
         memories: list = None,
         profile: Optional[LearningProfileSummary] = None,
         document_chunks: list = None,
+        session_summary: Optional[str] = None,
     ) -> str:
 
         sections = [
             "You are a personalized AI tutor. "
             "Adapt your teaching style and depth based on the user's known level."
         ]
+
+        # Long-term continuity summary
+        if session_summary:
+            sections.append(
+                "Ongoing Learning Journey (summary of the conversation so far, "
+                "including parts no longer shown in recent messages):\n"
+                + session_summary
+            )
+
 
         #Learning Profile
         if profile and profile.topics:

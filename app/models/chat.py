@@ -17,6 +17,9 @@ class ChatSession(Document):
     user_id: str
     title: str = "New Chat"
     message_count: int = 0
+    summary: Optional[str] = None
+    summary_updated_at: Optional[datetime] = None
+    last_summarized_message_count: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

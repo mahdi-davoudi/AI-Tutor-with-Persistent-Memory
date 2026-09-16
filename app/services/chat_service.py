@@ -9,6 +9,7 @@ from app.services.llm_service import LLMService
 from app.domain.tools import AVAILABLE_TOOLS
 from datetime import datetime, timezone
 import json
+from app.domain.session_summarizer import SessionSummarizer
 
 
 
@@ -20,6 +21,7 @@ class ChatService:
         self.memory_service = memory_service
         self.memory_extractor = memory_extractor
         self.document_service = document_service or DocumentService()
+        self.summarizer = summarizer or SessionSummarizer(llm)
     async def _get_or_create_session(self, user_id: str) -> ChatSession:
         sessions = (
             await ChatSession.find(ChatSession.user_id == user_id)
@@ -153,9 +155,12 @@ class ChatService:
         
         # 4.6 Load relevant document chunks (RAG)
         document_chunks = await self.document_service.search(user_id, content, limit=3)
+        
+        # 4.7 Long-term continuity summary (survives beyond the raw history window)
+        session_summary = session.summary
 
         # 5. Build prompt 
-        messages = PromptBuilder.build(history_dict, content, memories, profile, document_chunks)
+        messages = PromptBuilder.build(history_dict, content, memories, profile, document_chunks, session_summary)
         print("=" * 50)
         print("SYSTEM PROMPT:", messages[0]["content"])
         print("=" * 50)
@@ -198,6 +203,24 @@ class ChatService:
 
         await self.repo.update_session(session)
         print(f"SESSION UPDATED: {session.id}, message_count={session.message_count}, title={session.title}")
+
+        # 9.5 Long-term continuity: periodically refresh the rolling summary
+        if self.summarizer.should_summarize(session.message_count, session.last_summarized_message_count):
+            try:
+                recent = await self.repo.get_messages(
+                    session_id, limit=self.summarizer.SUMMARIZE_EVERY_N_MESSAGES
+                )
+                recent_dict = [{"role": m.role, "content": m.content} for m in recent]
+
+                new_summary, _ = await self.summarizer.summarize(session.summary, recent_dict)
+
+                session.summary = new_summary
+                session.summary_updated_at = datetime.now(timezone.utc)
+                session.last_summarized_message_count = session.message_count
+                await self.repo.update_session(session)
+                print(f"SESSION SUMMARY UPDATED: {session.id}")
+            except Exception as e:
+                print(f"SESSION SUMMARY ERROR: {e}")
 
         # 10. Return response
         return {

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     qdrant_document_collection_name: str = "document_chunks"
     embedding_dim: int = 384
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    document_relevance_threshold: float = 0.35
     
     @property
     def is_production(self) -> bool:

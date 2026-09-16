@@ -155,6 +155,7 @@ class DocumentService:
                     must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
                 ),
                 limit=limit,
+                score_threshold=settings.document_relevance_threshold,
             )
 
             return [

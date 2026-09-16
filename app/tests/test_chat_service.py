@@ -1,21 +1,23 @@
 import pytest
 from types import SimpleNamespace
-from services.chat_service import ChatService
+from app.services.chat_service import ChatService
 
 # Fake Repository
 
 class FakeRepository:
-
     def __init__(self):
         self.messages = []
-
-    async def get_session(self, session_id):
-        return SimpleNamespace(
-            id=session_id,
+        self.session = SimpleNamespace(
+            id="session1",
             user_id="user123",
             message_count=0,
             title="New Chat",
+            summary=None,
+            last_summarized_message_count=0,
         )
+
+    async def get_or_create_latest_session(self, user_id):
+        return self.session
 
     async def create_message(self, message):
         self.messages.append(message)

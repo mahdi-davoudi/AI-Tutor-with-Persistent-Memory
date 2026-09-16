@@ -3,9 +3,9 @@ from app.services.profile_service import ProfileService
 
 
 class ToolExecutor:
-
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, profile_service: ProfileService):
         self.user_id = user_id
+        self.profile_service = profile_service
 
     async def execute(self, tool_name: str, arguments: dict) -> str:
         try:
@@ -18,7 +18,7 @@ class ToolExecutor:
             return json.dumps({"error": str(e)})
 
     async def _get_learning_progress(self, topic: str) -> str:
-        profile = await ProfileService().get_summary(self.user_id)
+        profile = await self.profile_service.get_summary(self.user_id)
         topic_key = topic.lower().strip()
         match = next(
             (name for name in profile.topics if name.lower() == topic_key),
@@ -38,7 +38,7 @@ class ToolExecutor:
         })
 
     async def _list_weak_areas(self) -> str:
-        profile = await ProfileService().get_summary(self.user_id)
+        profile = await self.profile_service.get_summary(self.user_id)
         weak = [
             {"topic": name, "weak_skills": tp.weak}
             for name, tp in profile.topics.items()
